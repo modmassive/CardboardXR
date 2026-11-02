@@ -30,7 +30,7 @@ jobs:
             "https://github.com/modmassive/CardboardXR/releases/download/cardboardxr-ios-export-2026-11-02/CardboardXR-iOS-export.tar.gz" \
             --output "$ARCHIVE"
 
-          echo "a0f7dfa3cb033b7007f19f553ec2de6af0a22d2d141527bf7530b009e3cae48b  $ARCHIVE" \
+          echo "710410b3e37c858323766df6cec8e0a921792ea2bd585ba593ba328c8abfa875  $ARCHIVE" \
             | shasum -a 256 -c -
 
       - name: Extract Xcode project
