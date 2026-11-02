@@ -110,13 +110,95 @@ jobs:
 
           cd "$IPA_ROOT"
 
+          IPA_PATH="$GITHUB_WORKSPACE/CardboardXR-unsigned.ipa"
+
           ditto -c -k --sequesterRsrc --keepParent \
             Payload \
-            "$GITHUB_WORKSPACE/CardboardXR-unsigned.ipa"
+            "$IPA_PATH"
 
-          echo "IPA created successfully."
+          echo "Initial IPA created."
 
-          ls -lh "$GITHUB_WORKSPACE/CardboardXR-unsigned.ipa"
+          # Work around Sideloadly Info.plist signature hashing.
+          # Store all app and nested framework Info.plist files
+          # without ZIP compression.
+
+          python3 - "$IPA_PATH" <<'PY'
+          import copy
+          import os
+          import re
+          import sys
+          import zipfile
+
+          ipa_path = sys.argv[1]
+          temp_path = ipa_path + ".tmp"
+
+          plist_pattern = re.compile(
+              r"\.(?:app|framework|appex|bundle|xpc|watchkitapp|watchkitextension)/Info\.plist$"
+          )
+
+          with zipfile.ZipFile(ipa_path, "r") as source:
+              entries = source.infolist()
+
+              with zipfile.ZipFile(temp_path, "w") as target:
+                  target.comment = source.comment
+
+                  for entry in entries:
+                      copied = copy.copy(entry)
+                      data = source.read(entry.filename)
+
+                      if plist_pattern.search(entry.filename):
+                          copied.compress_type = zipfile.ZIP_STORED
+
+                      target.writestr(copied, data)
+
+          os.replace(temp_path, ipa_path)
+
+          with zipfile.ZipFile(ipa_path, "r") as check:
+              plist_entries = [
+                  entry for entry in check.infolist()
+                  if plist_pattern.search(entry.filename)
+              ]
+
+              compressed = [
+                  entry.filename for entry in plist_entries
+                  if entry.compress_type != zipfile.ZIP_STORED
+              ]
+
+              bad_entries = [
+                  entry.filename for entry in check.infolist()
+                  if entry.filename.startswith("Payload/")
+                  and entry.filename.endswith("/")
+              ]
+
+              if not plist_entries:
+                  raise SystemExit(
+                      "ERROR: No application Info.plist files found."
+                  )
+
+              if compressed:
+                  raise SystemExit(
+                      "ERROR: Compressed Info.plist files remain: "
+                      + ", ".join(compressed)
+                  )
+
+              bad_files = check.testzip()
+
+              if bad_files:
+                  raise SystemExit(
+                      "ERROR: IPA ZIP integrity failure: " + bad_files
+                  )
+
+          print(
+              f"Verified {len(plist_entries)} app/framework "
+              "Info.plist files are uncompressed."
+          )
+
+          print("IPA ZIP integrity verification passed.")
+          PY
+
+          echo "IPA created and verified successfully."
+
+          ls -lh "$IPA_PATH"
 
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
