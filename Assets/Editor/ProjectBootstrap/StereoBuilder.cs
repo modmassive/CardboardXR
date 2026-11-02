@@ -302,7 +302,7 @@ namespace ProjectBootstrap
         {
             var material = SaveAsset(new Material(boundaryShader) { name = "Boundary" }, $"{GeneratedFolder}/Boundary.mat");
             var planeObject = new GameObject("Boundary Plane", typeof(ARPlane), typeof(SurfaceMesh),
-                typeof(MeshFilter), typeof(MeshRenderer), typeof(BoxCollider), typeof(PlaneCollider), typeof(PlacementSurface));
+                typeof(BoxCollider), typeof(PlaneCollider), typeof(PlacementSurface));
             planeObject.layer = BoundaryLayer;
             var planeRenderer = planeObject.GetComponent<MeshRenderer>();
             // Two passes over the one mesh: shadows darkening the camera image, then the marks.
