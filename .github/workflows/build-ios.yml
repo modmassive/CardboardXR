@@ -1,0 +1,126 @@
+
+name: CardboardXR iOS Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    name: Build unsigned iPhone application
+    runs-on: macos-15-intel
+    timeout-minutes: 90
+
+    steps:
+      - name: Select Xcode 16.4
+        run: |
+          sudo xcode-select --switch \
+            /Applications/Xcode_16.4.app/Contents/Developer
+
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Download verified CardboardXR export
+        run: |
+          ARCHIVE="$RUNNER_TEMP/CardboardXR-iOS-export.tar.gz"
+
+          curl --fail --location --retry 3 \
+            "https://github.com/modmassive/CardboardXR/releases/download/cardboardxr-ios-export-2026-11-02/CardboardXR-iOS-export.tar.gz" \
+            --output "$ARCHIVE"
+
+          echo "a0f7dfa3cb033b7007f19f553ec2de6af0a22d2d141527bf7530b009e3cae48b  $ARCHIVE" \
+            | shasum -a 256 -c -
+
+      - name: Extract Xcode project
+        run: |
+          mkdir -p "$RUNNER_TEMP/cardboardxr"
+
+          tar -xzf \
+            "$RUNNER_TEMP/CardboardXR-iOS-export.tar.gz" \
+            -C "$RUNNER_TEMP/cardboardxr"
+
+          IOS_DIR="$RUNNER_TEMP/cardboardxr/iOS"
+
+          test -f "$IOS_DIR/Unity-iPhone.xcodeproj/project.pbxproj"
+
+          test -f "$IOS_DIR/Unity-iPhone.xcodeproj/xcshareddata/xcschemes/Unity-iPhone.xcscheme"
+
+          echo "Xcode project verified."
+
+      - name: Compile iOS application without Apple signing
+        run: |
+          set -o pipefail
+
+          IOS_DIR="$RUNNER_TEMP/cardboardxr/iOS"
+
+          xcodebuild \
+            -project "$IOS_DIR/Unity-iPhone.xcodeproj" \
+            -scheme Unity-iPhone \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -jobs 4 \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee "$RUNNER_TEMP/xcodebuild.log"
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+
+          PRODUCTS="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos"
+
+          APP_PATH=""
+
+          while IFS= read -r -d '' candidate; do
+            BUNDLE_ID=$(/usr/libexec/PlistBuddy \
+              -c 'Print :CFBundleIdentifier' \
+              "$candidate/Info.plist" 2>/dev/null || true)
+
+            if [[ "$BUNDLE_ID" == "com.cardboardlink.cardboardxr" ]]; then
+              APP_PATH="$candidate"
+              break
+            fi
+          done < <(find "$PRODUCTS" -maxdepth 2 -type d -name '*.app' -print0)
+
+          if [[ -z "$APP_PATH" ]]; then
+            echo "CardboardXR application was not found."
+            find "$PRODUCTS" -maxdepth 3 -print
+            exit 1
+          fi
+
+          IPA_ROOT="$RUNNER_TEMP/ipa-root"
+          mkdir -p "$IPA_ROOT/Payload"
+
+          ditto "$APP_PATH" "$IPA_ROOT/Payload/$(basename "$APP_PATH")"
+
+          cd "$IPA_ROOT"
+
+          ditto -c -k --sequesterRsrc --keepParent \
+            Payload \
+            "$GITHUB_WORKSPACE/CardboardXR-unsigned.ipa"
+
+          echo "IPA created successfully."
+
+          ls -lh "$GITHUB_WORKSPACE/CardboardXR-unsigned.ipa"
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: CardboardXR-unsigned-IPA
+          path: CardboardXR-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload Xcode build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: CardboardXR-Xcode-build-log
+          path: ${{ runner.temp }}/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
