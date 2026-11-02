@@ -1,4 +1,4 @@
-using CardboardXR.Interaction;
+﻿using CardboardXR.Interaction;
 using CardboardXR.Stereo;
 using CardboardXR.UI;
 using UnityEngine;
@@ -41,6 +41,31 @@ namespace CardboardXR.Hands
 
         // Whether pinching clicks: always, unless the "pinch 0" launch option says otherwise.
         public bool IsOn => m_On;
+
+        // Enables or disables pinch input at runtime.
+        public void SetOn(bool on)
+        {
+            if (m_On == on)
+                return;
+
+            m_On = on;
+
+            if (!on)
+            {
+                m_Sensor.enabled = false;
+                m_NoHandFor = 0f;
+                m_OnButtonFor = 0f;
+
+                if (m_Gaze.Reticle != null)
+                    m_Gaze.Reticle.HandSeen = false;
+            }
+            else
+            {
+                m_ThreeDofSince = Time.unscaledTime;
+            }
+
+            Debug.Log($"[Pinch] Pinch to click {(m_On ? "on" : "off")}");
+        }
 
         void Awake()
         {
@@ -99,3 +124,4 @@ namespace CardboardXR.Hands
             pinchRunning && noHandFor >= k_HintSeconds && onButtonFor >= k_HintSeconds;
     }
 }
+

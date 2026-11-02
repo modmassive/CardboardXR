@@ -31,6 +31,7 @@ namespace CardboardXR.Stereo
         GameObject m_Menu;
         float m_MenuCloseTime;
         M3Button m_View;
+        M3Button m_GameMode;
         bool m_ShownMono;
         GameObject m_ScanPanel;
         RawImage m_Preview;
@@ -51,9 +52,22 @@ namespace CardboardXR.Stereo
             LoadSavedViewer();
         }
 
-        void OnEnable() => m_Scanner.CodeFound += OnCodeFound;
+        void OnEnable()
+        {
+            m_Scanner.CodeFound += OnCodeFound;
+            GameModeHub.StateChanged += OnGameModeStateChanged;
+        }
 
-        void OnDisable() => m_Scanner.CodeFound -= OnCodeFound;
+        void OnDisable()
+        {
+            m_Scanner.CodeFound -= OnCodeFound;
+            GameModeHub.StateChanged -= OnGameModeStateChanged;
+        }
+
+        void OnGameModeStateChanged(bool active)
+        {
+            UpdateGameModeLabel();
+        }
 
         void Update()
         {
@@ -215,6 +229,21 @@ namespace CardboardXR.Stereo
         // The phone-screen UI, for use with the phone in hand: Material tonal buttons at the top right,
         // the QR scanner's screen, and a snackbar for messages. Laid out in dp inside a frame scaled to
         // the screen (k_DpOnScreen reference pixels each), so it's sized as Material sizes phone UI.
+        void ToggleGameMode()
+        {
+            GameModeHub.Toggle();
+            M3Fade.Hide(m_Menu);
+        }
+
+        void UpdateGameModeLabel()
+        {
+            if (m_GameMode == null)
+                return;
+
+            m_GameMode.Text = GameModeHub.IsActive ? "Game Mode: On" : "Game Mode: Off";
+            m_GameMode.Selected = GameModeHub.IsActive;
+        }
+
         void BuildUi()
         {
             var canvasObject = new GameObject("Viewer Setup UI", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -236,20 +265,24 @@ namespace CardboardXR.Stereo
             // world-space panel can't be reached.
             var corner = Frame("Corner", root, new Vector2(1f, 1f), new Vector2(-12f, -12f), new Vector2(40f, 40f));
             m_SettingsButton = M3.IconButton("Settings", corner, "settings", M3Button.Variant.Tonal, Vector2.zero, ToggleMenu, 40f).gameObject;
-            var menuFrame = Frame("Menu Frame", root, new Vector2(1f, 1f), new Vector2(-12f, -60f), new Vector2(200f, 188f));
-            var menu = M3.Surface("Menu", menuFrame, Vector2.zero, new Vector2(200f, 188f), M3Theme.SurfaceContainer, M3Theme.k_ShapeSmall);
-            M3.Button("Set viewer", menu.rectTransform, "Set viewer", M3Button.Variant.Text, new Vector2(0f, 60f), ChooseSetViewer,
+            var menuFrame = Frame("Menu Frame", root, new Vector2(1f, 1f), new Vector2(-12f, -60f), new Vector2(200f, 248f));
+            var menu = M3.Surface("Menu", menuFrame, Vector2.zero, new Vector2(200f, 248f), M3Theme.SurfaceContainer, M3Theme.k_ShapeSmall);
+            M3.Button("Set viewer", menu.rectTransform, "Set viewer", M3Button.Variant.Text, new Vector2(0f, 84f), ChooseSetViewer,
                 "qr_code_scanner", 184f);
-            m_View = M3.Button("View", menu.rectTransform, "Phone view", M3Button.Variant.Text, new Vector2(0f, 0f), ToggleView,
+            m_View = M3.Button("View", menu.rectTransform, "Phone view", M3Button.Variant.Text, new Vector2(0f, 28f), ToggleView,
                 "smartphone", 184f);
+            m_GameMode = M3.Button("Game Mode", menu.rectTransform, "Game Mode: Off",
+                M3Button.Variant.Tonal, new Vector2(0f, -28f), ToggleGameMode, "gamepad", 184f);
+
             // The settings panel is summoned by looking at a palm and pinching; this is for when there's
             // no hand to do it with.
-            M3.Button("Open settings", menu.rectTransform, "Open settings", M3Button.Variant.Text, new Vector2(0f, -60f),
+            M3.Button("Open settings", menu.rectTransform, "Open settings", M3Button.Variant.Text, new Vector2(0f, -84f),
                 ChooseOpenSettings, "settings", 184f);
             m_Menu = menuFrame.gameObject;
             m_Menu.AddComponent<M3Fade>();
             m_Menu.SetActive(false);
             UpdateViewLabel();
+            UpdateGameModeLabel();
 
             m_ScanPanel = new GameObject("Scan Panel", typeof(Image));
             m_ScanPanel.transform.SetParent(root, false);
@@ -312,3 +345,4 @@ namespace CardboardXR.Stereo
         }
     }
 }
+
