@@ -74,24 +74,34 @@ jobs:
 
           PRODUCTS="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos"
 
-          APP_PATH=""
+          APP_PATH="$PRODUCTS/CardboardXR.app"
 
-          while IFS= read -r -d '' candidate; do
-            BUNDLE_ID=$(/usr/libexec/PlistBuddy \
-              -c 'Print :CFBundleIdentifier' \
-              "$candidate/Info.plist" 2>/dev/null || true)
-
-            if [[ "$BUNDLE_ID" == "com.cardboardlink.cardboardxr" ]]; then
-              APP_PATH="$candidate"
-              break
-            fi
-          done < <(find "$PRODUCTS" -maxdepth 2 -type d -name '*.app' -print0)
-
-          if [[ -z "$APP_PATH" ]]; then
-            echo "CardboardXR application was not found."
+          if [[ ! -d "$APP_PATH" ]]; then
+            echo "Expected application not found: $APP_PATH"
             find "$PRODUCTS" -maxdepth 3 -print
             exit 1
           fi
+
+          if [[ ! -f "$APP_PATH/Info.plist" ]]; then
+            echo "Application Info.plist was not found."
+            exit 1
+          fi
+
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy \
+            -c 'Print :CFBundleIdentifier' \
+            "$APP_PATH/Info.plist" 2>/dev/null) || {
+              echo "Could not read application bundle identifier."
+              exit 1
+            }
+
+          if [[ "$BUNDLE_ID" != "com.brenpoly.cardboardxr" ]]; then
+            echo "Unexpected bundle identifier: $BUNDLE_ID"
+            echo "Expected: com.brenpoly.cardboardxr"
+            exit 1
+          fi
+
+          echo "Found CardboardXR application."
+          echo "Bundle identifier: $BUNDLE_ID"
 
           IPA_ROOT="$RUNNER_TEMP/ipa-root"
           mkdir -p "$IPA_ROOT/Payload"
